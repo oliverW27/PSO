@@ -5,9 +5,34 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import copy
 
-random.seed(155) #155,
+random.seed(1905)
 
 class optimiser:
+    def __init__(self, dimensions)-> None:
+        self.dimensions = dimensions
+    def fitness_funtion(self, position):
+        pass
+
+class ackley(optimiser):
+    def fitness_function(self, position):
+        first_summation = 0
+        sec_summation = 0
+        for i in range(self.dimensions):
+            first_summation += position[i]**2
+            sec_summation += np.cos(2 * np.pi * position[i])
+        first_term = -20 * np.exp(-0.2 * math.sqrt((1/self.dimensions) * first_summation))
+        sec_term = -np.exp((1/self.dimensions) * sec_summation) + 20 + np.exp(1)
+        result = first_term + sec_term
+        return result
+    class rosenbrock(optimiser):
+        def fitness_function(self, position):
+            n = self.dimensions
+            sum_val = 0.0
+            for i in range(n - 1):
+                sum_val += 100 * (position[i + 1] - position[i]**2)**2 + (1 - position[i])**2
+            return sum_val
+
+class PSO:
     def __init__(self, size, dimensions, topology, adjustment) -> None:
         self.opt = ackley(dimensions)
         self.size = size
@@ -56,20 +81,6 @@ class optimiser:
         self.standard_devs.append(self.swarm.get_standard_devs())
         self.velocity_vec_length.append(self.swarm.get_mean_len())
 
-class ackley:
-    def __init__(self, dimensions) -> None:
-        self.dimensions = dimensions
-
-    def fitness_function(self, position):
-        first_summation = 0
-        sec_summation = 0
-        for i in range(self.dimensions):
-            first_summation += position[i]**2
-            sec_summation += np.cos(2 * np.pi * position[i])
-        first_term = -20 * np.exp(-0.2 * math.sqrt((1/self.dimensions) * first_summation))
-        sec_term = -np.exp((1/self.dimensions) * sec_summation) + 20 + np.exp(1)
-        result = first_term + sec_term
-        return result
 
 class swarm:
     def __init__(self, l_boundary, u_boundary, size, dimensions, topology, adjustment, opt):
@@ -213,11 +224,10 @@ class particle:
             self.constrict_update(sync)
         elif self.adjustment == "nonlinear inertia":
             self.nonlin_inertia_update(curr_it, total_it, sync)
+        elif self.adjustment == "linear inertia":
+            self.lin_inertia_update(curr_it, total_it, sync)
         else:
             raise Exception("Not a valid update method.")
-        for i in self.position:
-            if i < -30 or i > 30:
-                i = self.get_rand_num(-30, 30, 1)[0]
 
     def update_pbest(self, new_data):
        if new_data[1] < self.pbest[1]:
@@ -232,9 +242,23 @@ class particle:
         self.gbest = gbest
         
     # We do not need this one, but might be interesting anyway :-)
-    def lin_inertia_update(self):
-        pass
-
+    def lin_inertia_update(self, curr_it, total_it, sync):
+        c12 = 2.05
+        e1 = random.random()
+        e2 = random.random()
+        pbest_c = self.get_pbest()[0]
+        w_min = 0.4
+        w_max = 0.9
+        w = w_max - ((w_max - w_min) * curr_it/total_it)
+        new_position = [10] * self.dimensions
+        for d in range (self.dimensions):
+            self.velocity[d] = w * self.velocity[d] + c12*e1*(pbest_c[d]- self.position[d]) + c12*e2*(self.gbest[0][d]- self.position[d])
+            new_position[d] = self.position[d] + self.velocity[d]
+        self.position = new_position
+        self.calculate_fit()
+        if sync == 0:
+            self.update_pbest([new_position, self.fit] )
+            self.update_gbest()
     # This is the variation using non-linear inertia
     def nonlin_inertia_update(self, curr_it, total_it, sync):
         c12 = 2.05
@@ -247,10 +271,7 @@ class particle:
             self.velocity[d] = w * self.velocity[d] + c12*e1*(pbest_c[d]- self.position[d]) + c12*e2*(self.gbest[0][d]- self.position[d])
             new_position[d] = self.position[d] + self.velocity[d]
         self.position = new_position
-        # if random.randint(0,10) == 5:
-        #     print(self.position)
         self.calculate_fit()
-        #print(self.fit)
         if sync == 0:
             self.update_pbest([new_position, self.fit] )
             self.update_gbest()
@@ -266,27 +287,20 @@ class particle:
     
     # This is the one for standard PSO. All numbers are from the paper.
     def constrict_update(self, sync):
-        #print("Fit before update is: ", self.fit)
         xi = 0.72984
         c12 = 2.05
         e1 = random.random()
         e2 = random.random()
         pbest_c = self.get_pbest()[0]
         new_position = [10] * self.dimensions
-        #print("position before update: ", self.position)
         for d in range (self.dimensions):
             self.velocity[d] = xi*(self.velocity[d] + c12*e1*(pbest_c[d]- self.position[d]) + c12*e2*(self.gbest[0][d]- self.position[d]))
             new_position[d] = self.position[d] + self.velocity[d]
         self.position = new_position
-        #print(self.velocity)
-        #print("position after update: ", self.position)
         self.calculate_fit()
         if sync == 0:
             self.update_pbest([new_position, self.fit] )
             self.update_gbest()
-            #print("fit after update is ", self.fit)
-            #print()
-
 
 def graph(data, reps, msg):
     data1 = []
@@ -294,73 +308,57 @@ def graph(data, reps, msg):
     data3 = []
     data4 = []
     colors = cm.get_cmap('tab10', reps)
+    legend_labels = ["run 1", "run 2", "run 3", "run 4", "run 5", "run 6", "run 7", "run 8", "run 9", "run 10"]
     for i in range(len(data)):
         data1.append(data[i][0])
         data2.append(data[i][1])
         data3.append(data[i][2])
-        #print(data3)
         data4.append(data[i][3])
-    # Create a figure with two subplots (1 row, 2 columns)
-    #print(data2)
-    plt.figure(figsize=(20, 8))  # Adjust the figure size as needed
+    
+    plt.figure(figsize=(20, 8))
     co_it = 0
-    # Subplot 1 (left)
-    plt.subplot(2, 2, 1)  # 1 row, 2 columns, select the first subplot
-    for listy in data1:
-        plt.plot(range(1, 1001), listy, color= colors(co_it))
+    
+    plt.subplot(2, 2, 1)
+    for listy, label in zip(data1, legend_labels):
+        plt.plot(range(1, 1001), listy, color=colors(co_it), label=label)
         co_it += 1
     plt.xlabel('Iterations')
     plt.ylabel('Fitness')
     plt.title('Global best over 1000 iterations')
     plt.grid(alpha=0.5, linestyle='--')
+    plt.legend( fontsize="5")
     
-
     co_it = 0
-    # Subplot 2 (right)
-    plt.subplot(2, 2, 2)  # 1 row, 2 columns, select the second subplot
-    for listy in data2:
-        plt.plot(range(1, 1001), listy, color=colors(co_it))
+    plt.subplot(2, 2, 2)
+    for listy, label in zip(data2, legend_labels):
+        plt.plot(range(1, 1001), listy, color=colors(co_it), label=label)
         co_it += 1
     plt.xlabel('Iterations')
     plt.ylabel('Distance')
     plt.title('Distance of swarm mean position to origin')
     plt.grid(alpha=0.5, linestyle='--')
-    
-
+    plt.legend(fontsize="5")
     co_it = 0
-    plt.subplot(2, 2, 3)  # 1 row, 3 columns, select the third subplot
-    for listy in data3:
-        plt.plot(range(1, 1001), listy, color=colors(co_it))
+    plt.subplot(2, 2, 3)
+    for listy, label in zip(data3, legend_labels):
+        plt.plot(range(1, 1001), listy, color=colors(co_it), label=label)
         co_it += 1
     plt.xlabel('Iterations')
     plt.ylabel('Standard deviation')
     plt.title('Standard deviation of particles to mean position')
     plt.grid(alpha=0.5, linestyle='--')
-    
-
+    plt.legend(fontsize="5")
     co_it = 0
-    plt.subplot(2, 2, 4)  # 1 row, 3 columns, select the third subplot
-    for listy in data4:
-        plt.plot(range(1, 1001), listy, color=colors(co_it))
+    plt.subplot(2, 2, 4)
+    for listy, label in zip(data4, legend_labels):
+        plt.plot(range(1, 1001), listy, color=colors(co_it), label=label)
         co_it += 1
     plt.ylabel('Mean vector length')
     plt.xlabel('Iterations')
     plt.title('Mean velocity of swarm')
     plt.grid(alpha=0.5, linestyle='--')
-    
+    plt.legend(fontsize="5")
 
-    # Adjust spacing between subplots
-    plt.tight_layout()
-    
-    # Show the plot
+    plt.subplots_adjust(hspace=0.5)
     plt.savefig('metrics_std_pso{}.png'.format(msg))
-   # plt.show()
     plt.close()
-    
-# a = optimiser(50, 10, "lbest", "constriction")
-# a.standard_PSO(1000)
-
-
-
-
-
